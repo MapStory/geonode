@@ -21,6 +21,8 @@ import re
 import math
 import logging
 
+from osgeo import osr
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,7 @@ def bbox2wktpolygon(bbox):
     maxx = float(bbox[2])
     maxy = float(bbox[3])
     return 'POLYGON((%.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f))' \
-        % (minx, miny, minx, maxy, maxx, maxy, maxx, miny, minx, miny)
+           % (minx, miny, minx, maxy, maxx, maxy, maxx, miny, minx, miny)
 
 
 def inverse_mercator(xy):
@@ -64,8 +66,7 @@ def inverse_mercator(xy):
     """
     lon = (xy[0] / 20037508.34) * 180
     lat = (xy[1] / 20037508.34) * 180
-    lat = 180 / math.pi * \
-        (2 * math.atan(math.exp(lat * math.pi / 180)) - math.pi / 2)
+    lat = 180 / math.pi * (2 * math.atan(math.exp(lat * math.pi / 180)) - math.pi / 2)
     return (lon, lat)
 
 
@@ -102,3 +103,61 @@ def decimal_encode(bbox):
             _srid = o
     _bbox = _bbox if not _srid else _bbox + [_srid]
     return _bbox
+
+
+def test_resource_table_status(test_cls, table, is_row_filtered):
+    tbody = table.find_elements_by_tag_name('tbody')
+    rows = tbody[0].find_elements_by_tag_name('tr')
+    visible_rows_count = 0
+    filter_row_count = 0
+    hidden_row_count = 0
+    for row in rows:
+        attr_name = row.get_attribute('name')
+        val = row.value_of_css_property('display')
+
+        if attr_name == "filter_row":
+            filter_row_count = filter_row_count + 1
+        if val == "none":
+            hidden_row_count = hidden_row_count + 1
+        else:
+            visible_rows_count = visible_rows_count + 1
+    result = {"filter_row_count": filter_row_count,
+              "visible_rows_count": visible_rows_count,
+              "hidden_row_count": hidden_row_count}
+
+    if is_row_filtered:
+        test_cls.assertTrue(result["filter_row_count"] > 0)
+        test_cls.assertEqual(result["visible_rows_count"], result["filter_row_count"])
+        test_cls.assertEqual(result["hidden_row_count"], 20)
+    else:
+        test_cls.assertEqual(result["filter_row_count"], 0)
+        test_cls.assertEqual(result["visible_rows_count"], 20)
+        test_cls.assertEqual(result["hidden_row_count"], 0)
+
+
+def epsg_string(extent):
+    logging.debug('bbox: %s', extent)
+    if 'spatialReference' in extent:
+        sr = extent['spatialReference']
+        if 'latestWkid' in sr:
+            return "EPSG:%s" % sr['latestWkid']
+        if 'wkt' in sr:
+            wkt = sr['wkt']
+            logging.debug('wkt: %s', wkt)
+            ref = osr.SpatialReference()
+            ref.ImportFromWkt(wkt)
+            ref.MorphFromESRI()
+            matches = ref.FindMatches()
+            if len(matches) > 0:
+                match = matches[0][0]
+                code = match.GetAuthorityCode('PROJCS')
+                if code:
+                    return "EPSG:%s" % code
+                code = match.GetAuthorityCode('GEOGCS')
+                if code:
+                    return "EPSG:%s" % code
+                code = match.GetAuthorityCode(None)
+                if code:
+                    return "EPSG:%s" % code
+
+    return None
