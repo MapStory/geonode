@@ -20,7 +20,8 @@
 import re
 import math
 import logging
-from decimal import Decimal
+
+from osgeo import osr
 
 logger = logging.getLogger(__name__)
 
@@ -88,40 +89,19 @@ def get_esri_service_name(url):
         return result.group(1)
 
 
-def get_esri_extent(esriobj):
-    """
-    Get the extent of an ESRI resource
-    """
-
-    extent = None
-    srs = None
-
-    try:
-        if 'fullExtent' in esriobj._json_struct:
-            extent = esriobj._json_struct['fullExtent']
-    except Exception as err:
-        logger.error(err, exc_info=True)
-
-    try:
-        if 'extent' in esriobj._json_struct:
-            extent = esriobj._json_struct['extent']
-    except Exception as err:
-        logger.error(err, exc_info=True)
-
-    try:
-        srs = extent['spatialReference']['wkid']
-    except Exception as err:
-        logger.error(err, exc_info=True)
-
-    return [extent, srs]
-
-
 def decimal_encode(bbox):
     _bbox = []
-    for o in [float(coord) for coord in bbox]:
-        if isinstance(o, Decimal):
-            o = (str(o) for o in [o])
-        _bbox.append("{0:.15f}".format(round(o, 2)))
+    _srid = None
+    for o in bbox:
+        try:
+            o = float(o)
+        except BaseException:
+            o = None if 'EPSG' not in o else o
+        if o and isinstance(o, float):
+            _bbox.append("{0:.15f}".format(round(o, 2)))
+        elif o and 'EPSG' in o:
+            _srid = o
+    _bbox = _bbox if not _srid else _bbox + [_srid]
     return _bbox
 
 
@@ -153,3 +133,31 @@ def test_resource_table_status(test_cls, table, is_row_filtered):
         test_cls.assertEqual(result["filter_row_count"], 0)
         test_cls.assertEqual(result["visible_rows_count"], 20)
         test_cls.assertEqual(result["hidden_row_count"], 0)
+
+
+def epsg_string(extent):
+    logging.debug('bbox: %s', extent)
+    if 'spatialReference' in extent:
+        sr = extent['spatialReference']
+        if 'latestWkid' in sr:
+            return "EPSG:%s" % sr['latestWkid']
+        if 'wkt' in sr:
+            wkt = sr['wkt']
+            logging.debug('wkt: %s', wkt)
+            ref = osr.SpatialReference()
+            ref.ImportFromWkt(wkt)
+            ref.MorphFromESRI()
+            matches = ref.FindMatches()
+            if len(matches) > 0:
+                match = matches[0][0]
+                code = match.GetAuthorityCode('PROJCS')
+                if code:
+                    return "EPSG:%s" % code
+                code = match.GetAuthorityCode('GEOGCS')
+                if code:
+                    return "EPSG:%s" % code
+                code = match.GetAuthorityCode(None)
+                if code:
+                    return "EPSG:%s" % code
+
+    return None

@@ -33,7 +33,7 @@ from geonode.base.models import Link
 from geonode.layers.models import Layer
 from geonode.layers.utils import create_thumbnail
 
-from arcrest import MapService as ArcMapService, ImageService as ArcImageService
+from arcrest.ags import MapService as ArcMapService, ImageService as ArcImageService
 
 from .. import enumerations
 from ..enumerations import INDEXED
@@ -68,7 +68,6 @@ class ArcMapServiceHandler(base.ServiceHandlerBase):
         self.proxy_base = None
         self.url = url
         self.parsed_service = ArcMapService(self.url)
-        extent, srs = utils.get_esri_extent(self.parsed_service)
         try:
             _sname = utils.get_esri_service_name(self.url)
             _title_safe = safe(os.path.basename(os.path.normpath(_sname)))
@@ -108,17 +107,17 @@ class ArcMapServiceHandler(base.ServiceHandlerBase):
             method=self.indexing_method,
             owner=owner,
             parent=parent,
-            version=self.parsed_service._json_struct["currentVersion"],
+            version=self.parsed_service.currentVersion,
             name=self.name,
             title=self.title,
-            abstract=self.parsed_service._json_struct["serviceDescription"] or _(
+            abstract=self.parsed_service.serviceDescription or _(
                 "Not provided"),
             online_resource=self.parsed_service.url,
         )
         return instance
 
     def get_keywords(self):
-        return self.parsed_service._json_struct["capabilities"].split(",")
+        return self.parsed_service.documentInfo['Keywords'].split(',')
 
     def get_resource(self, resource_id):
         ll = None
@@ -213,7 +212,7 @@ class ArcMapServiceHandler(base.ServiceHandlerBase):
         return geonode_projection in "EPSG:{}".format(srs)
 
     def _get_indexed_layer_fields(self, layer_meta):
-        srs = "EPSG:%s" % layer_meta.extent.spatialReference.wkid
+        srs = utils.epsg_string(layer_meta.extent)
         bbox = utils.decimal_encode([layer_meta.extent.xmin,
                                      layer_meta.extent.ymin,
                                      layer_meta.extent.xmax,
@@ -309,7 +308,6 @@ class ArcImageServiceHandler(ArcMapServiceHandler):
         self.proxy_base = None
         self.url = url
         self.parsed_service = ArcImageService(self.url)
-        extent, srs = utils.get_esri_extent(self.parsed_service)
         try:
             _sname = utils.get_esri_service_name(self.url)
             _title_safe = safe(os.path.basename(os.path.normpath(_sname)))
