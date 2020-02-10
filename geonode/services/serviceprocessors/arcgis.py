@@ -213,10 +213,10 @@ class ArcMapServiceHandler(base.ServiceHandlerBase):
 
     def _get_indexed_layer_fields(self, layer_meta):
         srs = utils.epsg_string(layer_meta.extent)
-        bbox = utils.decimal_encode([layer_meta.extent.xmin,
-                                     layer_meta.extent.ymin,
-                                     layer_meta.extent.xmax,
-                                     layer_meta.extent.ymax])
+        bbox = utils.decimal_encode([layer_meta.extent['xmin'],
+                                     layer_meta.extent['ymin'],
+                                     layer_meta.extent['xmax'],
+                                     layer_meta.extent['ymax']])
         return {
             "name": layer_meta.title,
             "store": self.name,
