@@ -102,6 +102,11 @@ def decimal_encode(bbox):
         elif o and 'EPSG' in o:
             _srid = o
     _bbox = _bbox if not _srid else _bbox + [_srid]
+    if len(_bbox) < 4:
+        logger.error("Did not find enough elements in bbox: {0}".format(bbox))
+        # TODO: Is this the right thing to do here?
+        while len(_bbox) < 4:
+            _bbox.append("0")
     return _bbox
 
 
